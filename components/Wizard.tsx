@@ -375,6 +375,30 @@ function InterviewStep({
   const set = (id: string, value: string) =>
     setReplies((prev) => ({ ...prev, [id]: value }));
 
+  /**
+   * A single-answer question replaces the field; a multi-answer one toggles the
+   * option in and out of a comma-separated list, so "what will you not build"
+   * can take several clicks without the user retyping the earlier ones.
+   */
+  function chooseOption(q: InterviewQuestion, option: string) {
+    const current = replies[q.id] ?? "";
+    if (!q.multi) {
+      set(q.id, current === option ? "" : option);
+      return;
+    }
+    const parts = current.split(",").map((p) => p.trim()).filter(Boolean);
+    const next = parts.includes(option)
+      ? parts.filter((p) => p !== option)
+      : [...parts, option];
+    set(q.id, next.join(", "));
+  }
+
+  function isChosen(q: InterviewQuestion, option: string) {
+    const current = replies[q.id] ?? "";
+    if (!q.multi) return current === option;
+    return current.split(",").map((p) => p.trim()).includes(option);
+  }
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="text-center">
@@ -410,24 +434,32 @@ function InterviewStep({
                   ) : null}
 
                   {q.options?.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {q.options.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => set(q.id, option)}
-                          className={cx(
-                            "rounded-full px-3 py-1.5 text-[12.5px] transition-colors duration-300",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral",
-                            replies[q.id] === option
-                              ? "bg-fjord text-ivory"
-                              : "bg-fjord/[0.05] text-ink-muted ring-1 ring-fjord/10 hover:bg-fjord/[0.09]",
-                          )}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {q.options.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            aria-pressed={isChosen(q, option)}
+                            onClick={() => chooseOption(q, option)}
+                            className={cx(
+                              "rounded-full px-3 py-1.5 text-left text-[12.5px] transition-colors duration-300",
+                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral",
+                              isChosen(q, option)
+                                ? "bg-fjord text-ivory"
+                                : "bg-fjord/[0.05] text-ink-muted ring-1 ring-fjord/10 hover:bg-fjord/[0.09]",
+                            )}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-[12px] text-ink-muted">
+                        {q.multi
+                          ? "Pick as many as apply, or write your own below."
+                          : "Pick one, or write your own below."}
+                      </p>
+                    </>
                   ) : null}
 
                   <textarea
@@ -436,7 +468,7 @@ function InterviewStep({
                     onChange={(e) => set(q.id, e.target.value)}
                     rows={2}
                     placeholder={q.placeholder || "Your answer"}
-                    className="thin-scroll mt-3 w-full resize-y rounded-xl bg-fjord/[0.035] px-4 py-3 text-[14px] leading-relaxed ring-1 ring-fjord/[0.07] transition-shadow duration-300 placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-coral/60"
+                    className="thin-scroll mt-2 w-full resize-y rounded-xl bg-fjord/[0.035] px-4 py-3 text-[14px] leading-relaxed ring-1 ring-fjord/[0.07] transition-shadow duration-300 placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-coral/60"
                   />
                 </div>
               </div>

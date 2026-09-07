@@ -96,6 +96,7 @@ function parseQuestions(raw: string): InterviewQuestion[] {
         question: q.question,
         why: typeof q.why === "string" ? q.why : "",
         placeholder: typeof q.placeholder === "string" ? q.placeholder : "",
+        multi: q.multi === true,
         options: Array.isArray(q.options)
           ? q.options.filter((o: unknown) => typeof o === "string").slice(0, 4)
           : undefined,

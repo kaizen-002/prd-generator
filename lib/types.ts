@@ -8,8 +8,10 @@ export interface InterviewQuestion {
   /** Why this matters — shown under the field so the user answers usefully. */
   why: string;
   placeholder: string;
-  /** Suggested answers the user can click to fill the field. */
+  /** Suggested answers the user can click to fill the field. Always four. */
   options?: string[];
+  /** Several options can be true at once, so clicking toggles rather than replaces. */
+  multi?: boolean;
 }
 
 export interface Answer {
