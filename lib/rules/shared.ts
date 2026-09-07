@@ -39,6 +39,22 @@ Business logic depends on abstractions; the concrete adapter is injected at the
 edge. The core must not import the database driver, the HTTP client, or the
 file system directly.
 
+**This rule and KISS pull against each other, and the conflict is real.** KISS
+forbids an abstraction with one implementation; Dependency Inversion asks for a
+seam at every external boundary, and early on every one of those seams has exactly
+one adapter. Read literally, the two deadlock and the first feature stalls in a
+style argument.
+
+Resolution: a port is justified when it buys something **today**, and the usual
+thing it buys is a test that runs without the network, a model, a browser or a
+database. That is a present benefit, which is what KISS asks for; KISS forbids
+speculative generality, not seams that pay now. So:
+
+- List the ports explicitly, with the adapter and the reason each seam exists.
+- Keep the list closed. A new port needs a recorded decision, not a preference.
+- A seam justified only by "we might swap it later" is the speculative kind. Do
+  not build it.
+
 ## DRY — rule of three, same reason to change
 
 Duplicate code is not automatically a defect. Abstract only when **both** hold:
@@ -65,14 +81,31 @@ Ship the simplest implementation that satisfies the acceptance criteria in PRD.m
 - Solve the case in front of you. Generality added speculatively is usually wrong,
   and it is always harder to delete than to add.
 
+## Numbers must be computed
+
+No measurement, ratio, duration or performance figure enters a document, a comment
+or a commit message unless something produced it. If it cannot be computed yet,
+give the range and mark it an estimate.
+
+Asserted numbers read exactly like measured ones and are wrong far more often. A
+contrast table nobody ran, or a latency target nobody divided into stages, will be
+trusted by everyone downstream and is worse than an empty cell.
+
 ## Working agreements
 
 - **Scope.** Read PRD.md before starting a feature. If the work is not in MVP Scope,
   stop and say so. If it appears in Out of Scope, refuse and explain.
-- **Design.** Read design.md before writing UI. Use the defined tokens. Never
-  introduce a raw hex, size, or duration that is not in the token set.
-- **Schema.** Read schema.md before touching the database. Schema changes are
-  migrations, never manual edits.
+- **Design.** Read design.md before writing UI, and before writing any renderer
+  that produces a visual artefact the product ships. Use the defined tokens. Never
+  introduce a raw hex, size, or duration outside the token set. If the product
+  renders its own output, those tokens are tokens too — the renderer emits them,
+  it does not invent values.
+{{DATA_RULE}}
+- **The documents are one set.** They are read together, so check a change against
+  all of them, not only the one you edited. Each can be internally plausible while
+  contradicting the others — a constraint that forbids a feature, a design system
+  the chosen stack cannot express, a rule pointing at a file that does not exist.
+  Those only surface when the set is read as a whole.
 - **Docs follow code.** If a change makes any of these documents wrong, fix the
   document in the same commit. A stale document is worse than a missing one,
   because it will be trusted.
@@ -167,8 +200,26 @@ export const RULES_STACKS: Record<string, { label: string; body: string }> = {
   },
 };
 
-/** Assembles rules.md for the chosen stack. No model involved. */
-export function buildRules(stackKey: string): string {
+const DATA_RULE_WITH_DB = `- **Schema.** Read schema.md before touching the database. Schema changes are
+  migrations, never manual edits.`;
+
+const DATA_RULE_NO_DB = `- **Storage.** This project has no database and no schema.md. State lives in
+  files or in memory. Say where each artefact is written and when it is deleted —
+  a process that only ever writes will eventually fill the disk.`;
+
+/**
+ * Assembles rules.md for the chosen stack. No model involved.
+ *
+ * `hasDatabase` matters because the storage rule is otherwise a dead pointer: a
+ * project with no database was still told to read a schema.md the generator had
+ * deliberately not produced. A rule pointing at a missing file teaches the reader
+ * that the rules are decorative.
+ */
+export function buildRules(stackKey: string, hasDatabase = true): string {
   const stack = RULES_STACKS[stackKey] ?? RULES_STACKS.generic;
-  return `${RULES_CORE}\n${stack.body}`;
+  const core = RULES_CORE.replace(
+    "{{DATA_RULE}}",
+    hasDatabase ? DATA_RULE_WITH_DB : DATA_RULE_NO_DB,
+  );
+  return `${core}\n${stack.body}`;
 }

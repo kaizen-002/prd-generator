@@ -28,7 +28,46 @@ Hard rules:
 - Never invent a feature the user did not describe or clearly imply.
 - Where you must assume something, mark it "(assumed)" inline so it can be challenged.
 - Do not include timelines, team sizes, or budgets unless the user gave them.
-- Do not write filler like "This document outlines...". Start with the substance.`;
+- Do not write filler like "This document outlines...". Start with the substance.
+
+Before you finish, run these checks over what you have written. Each one has been
+violated in a real generated document, and each violation made the document
+actively harmful rather than merely thin.
+
+1. FEASIBILITY. Any performance, latency, throughput or cost target must be
+   accompanied by a per-stage table whose estimates sum to it. Name the dominant
+   stage. If the arithmetic does not reach the target, do not write the target:
+   state the achievable range instead and say what would have to change. A number
+   nobody has divided into its parts is a wish, and every metric anchored to it
+   inherits the error. State plainly that these are estimates, not measurements.
+2. CONSTRAINTS VERSUS FEATURES. Read every Hard Constraint against every MVP
+   feature and confirm no constraint forbids a feature. Broad words are where this
+   goes wrong — "offline", "no external services", "zero dependencies" — so write
+   the constraint at the precision that makes it true, and name the exception. If a
+   constraint and a feature genuinely conflict, that is a decision, not prose.
+3. DEPENDENCIES. Every MVP feature must map to a named dependency in Third-Party
+   Services. Build the mapping explicitly as a table. A feature whose enabling tool
+   is unnamed will be built against an invented one.
+4. ACCEPTANCE CRITERIA MUST BE COMPATIBLE. Read them as a set. If one demands an
+   output format and another demands a capability that format cannot express, they
+   cannot both be met — pick one, and say why in a DECISION.
+5. MEASURABILITY. Every success metric must be measurable by this product as
+   scoped, and must name how it is measured. If it needs telemetry, a survey, a
+   distribution channel or a test harness the product does not have, either put
+   that mechanism in scope or drop the metric. Never compare an output to the thing
+   it was derived from: that measures nothing and always passes.
+6. FAILURE PATHS. Where the product depends on a model, an external service or user
+   input, specify the output contract, the validation, and what happens when
+   validation fails. "It returns JSON" is not a contract.
+7. STATE INVARIANTS. Where users edit generated data, list what must remain true.
+   Pay attention to derived data that looks independent and is not — timings,
+   offsets, indices, ids — because that is the invariant a naive implementation
+   silently breaks.
+8. FILE LIFECYCLE. If the product writes files, say when they are deleted. An app
+   that only ever writes will eventually fill the disk.
+9. DECISIONS. Where a fix requires a real tradeoff, write a \`DECISION\` block:
+   options, a recommendation, and the cost of choosing wrong. Do not resolve it
+   silently and do not leave it vague. List them at the top of the document.`;
 
 export function prdPrompt(idea: string, answers: Answer[]): string {
   const qa = answers

@@ -30,7 +30,7 @@ export function Wizard() {
 
   const docsRef = useRef<HTMLDivElement>(null);
 
-  const rules = useMemo(() => buildRules(stack), [stack]);
+  const rules = useMemo(() => buildRules(stack, hasDatabase), [stack, hasDatabase]);
 
   /*
    * Everything with content, in repository order. schema.md is left out entirely
