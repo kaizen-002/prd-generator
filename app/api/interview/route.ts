@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateText, LLMError } from "@/lib/llm";
+import { generateText, LLMError, TRUNCATION_NOTICE } from "@/lib/llm";
 import { INTERVIEW_SYSTEM, interviewPrompt } from "@/lib/prompts/interview";
 import { clientKey, rateLimit } from "@/lib/ratelimit";
 import type { InterviewQuestion } from "@/lib/types";
@@ -30,18 +30,43 @@ export async function POST(req: Request) {
   }
 
   try {
+    /*
+     * A dozen questions with options and rationale runs well past 2k tokens, and
+     * on thinking models the reasoning is billed against the same budget. Too low
+     * a ceiling truncates the JSON mid-object, which fails to parse only some of
+     * the time — an intermittent failure is worse than a slightly larger call.
+     */
+    let served = "unknown";
     const raw = await generateText({
+      onProvider: (p) => {
+        served = p;
+      },
       system: INTERVIEW_SYSTEM,
       prompt: interviewPrompt(idea),
       temperature: 0.4,
-      maxTokens: 2048,
+      maxTokens: 8192,
       json: true,
     });
 
+    if (raw.includes(TRUNCATION_NOTICE.trim().slice(0, 24))) {
+      return NextResponse.json(
+        { error: "The question list was cut off by the model's length limit. Try a shorter idea." },
+        { status: 502 },
+      );
+    }
+
     const questions = parseQuestions(raw);
     if (!questions.length) {
+      // Server-side only: the shape a model returned when it broke the contract
+      // is the one thing needed to fix the prompt, and it is invisible otherwise.
+      console.error(
+        `[interview] ${served} returned ${raw.length} chars that did not parse:`,
+        raw.slice(0, 600),
+      );
       return NextResponse.json(
-        { error: "The model did not return usable questions. Try rephrasing the idea." },
+        {
+          error: `The model (${served}) did not return usable questions. Try again, or rephrase the idea.`,
+        },
         { status: 502 },
       );
     }

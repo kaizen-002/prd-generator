@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const chunk of streamText({ system, prompt, maxTokens: 8192 })) {
+        for await (const chunk of streamText({ system, prompt, maxTokens: 16384 })) {
           controller.enqueue(encoder.encode(chunk));
         }
       } catch (err) {

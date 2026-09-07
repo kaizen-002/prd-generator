@@ -16,6 +16,12 @@ export interface GenerateOptions {
   temperature?: number;
   /** Ask the provider to constrain output to a JSON object. */
   json?: boolean;
+  /**
+   * Called with whichever provider actually served the request. With failover in
+   * play, "the model returned something unusable" is not diagnosable unless the
+   * caller knows which model that was.
+   */
+  onProvider?: (provider: Provider) => void;
 }
 
 export class LLMError extends Error {
@@ -51,7 +57,7 @@ function configure(provider: Provider): Configured | null {
   return {
     provider: "gemini",
     key,
-    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    model: process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
   };
 }
 
@@ -80,6 +86,21 @@ function providerChain(): Configured[] {
   return usable;
 }
 
+/**
+ * Gemini 3.x models think before answering, and those thoughts are billed against
+ * the same output budget the document needs — an unconstrained 3.6-flash spent
+ * 246 thinking tokens on a four-token reply. Capping the level keeps the budget
+ * for the document itself.
+ *
+ * Only 3.x accepts `thinkingLevel`; 2.5 uses a different field and rejects this
+ * one, so the config is omitted for anything that is not a 3.x model.
+ */
+function thinkingConfig(model: string): Record<string, unknown> {
+  if (!/^gemini-3/.test(model)) return {};
+  const level = process.env.GEMINI_THINKING_LEVEL ?? "low";
+  return { thinkingConfig: { thinkingLevel: level } };
+}
+
 /** A failure worth trying the next provider for: quota, or the provider being down. */
 function isFailoverWorthy(status: number): boolean {
   return status === 429 || status === 503 || status === 500 || status === 502;
@@ -100,7 +121,14 @@ export async function generateText(options: GenerateOptions): Promise<string> {
 export async function* streamText(
   options: GenerateOptions,
 ): AsyncGenerator<string> {
-  const { system, prompt, maxTokens = 8192, temperature = 0.7, json = false } = options;
+  const {
+    system,
+    prompt,
+    maxTokens = 8192,
+    temperature = 0.7,
+    json = false,
+    onProvider,
+  } = options;
   const chain = providerChain();
 
   let lastError: LLMError | null = null;
@@ -109,6 +137,7 @@ export async function* streamText(
     const { provider, key, model } = chain[i];
     const wire = { key, model, system, prompt, maxTokens, temperature, json };
     const source = provider === "groq" ? streamGroq(wire) : streamGemini(wire);
+    onProvider?.(provider);
 
     /*
      * Failover is only safe until the first token reaches the caller. After
@@ -163,6 +192,7 @@ async function* streamGemini(w: Wire): AsyncGenerator<string> {
       generationConfig: {
         temperature: w.temperature,
         maxOutputTokens: w.maxTokens,
+        ...thinkingConfig(w.model),
         ...(w.json ? { responseMimeType: "application/json" } : {}),
       },
     }),
@@ -225,24 +255,42 @@ async function* streamGroq(w: Wire): AsyncGenerator<string> {
   }
 }
 
-/** Shared SSE line reader. Yields the payload after each `data: ` prefix. */
+/**
+ * Shared SSE line reader. Yields the payload after each `data: ` prefix.
+ *
+ * The trailing flush matters: a stream can end without a final newline, and
+ * dropping that last line silently truncates the response. In prose that looks
+ * like a slightly short document; in JSON it fails to parse, and only sometimes,
+ * because whether the last line is newline-terminated depends on chunking.
+ */
 async function* readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
+  function* takeLines(flush: boolean) {
     let newline: number;
     while ((newline = buffer.indexOf("\n")) !== -1) {
       const line = buffer.slice(0, newline).trim();
       buffer = buffer.slice(newline + 1);
       if (line.startsWith("data:")) yield line.slice(5).trim();
     }
+    if (flush) {
+      const rest = buffer.trim();
+      buffer = "";
+      if (rest.startsWith("data:")) yield rest.slice(5).trim();
+    }
   }
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    yield* takeLines(false);
+  }
+
+  buffer += decoder.decode();
+  yield* takeLines(true);
 }
 
 async function describeFailure(res: Response, label: string): Promise<string> {
