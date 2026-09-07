@@ -81,6 +81,11 @@ client code.
 
 ## Using the output
 
+**Download all** gives a single `preparation-docs.zip` whose files sit at the
+archive root, so it unzips straight into a repository. A zip rather than several
+saves in a row: browsers prompt on the second programmatic download and silently
+drop the rest. Individual Copy and Download buttons remain on each document.
+
 Put the downloaded files at your repository root, then add to `CLAUDE.md`:
 
 ```

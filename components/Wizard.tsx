@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { cx } from "@/lib/cx";
 import { buildRules, RULES_STACKS } from "@/lib/rules/shared";
+import { downloadBundle, type BundleEntry } from "@/lib/download";
 import { DOCS, type Answer, type InterviewQuestion, type Stage } from "@/lib/types";
 import { ArrowGlyph, Bezel, Button, Eyebrow } from "./ui";
 import { DocPanel } from "./DocPanel";
@@ -30,6 +31,20 @@ export function Wizard() {
   const docsRef = useRef<HTMLDivElement>(null);
 
   const rules = useMemo(() => buildRules(stack), [stack]);
+
+  /*
+   * Everything with content, in repository order. schema.md is left out entirely
+   * when the project has no database rather than shipped empty.
+   */
+  const bundle: BundleEntry[] = useMemo(() => {
+    const entries: BundleEntry[] = [
+      { filename: DOCS.prd.filename, content: prd },
+      { filename: DOCS.design.filename, content: design },
+    ];
+    if (hasDatabase) entries.push({ filename: DOCS.schema.filename, content: schema });
+    entries.push({ filename: DOCS.rules.filename, content: rules });
+    return entries.filter((e) => e.content.trim());
+  }, [design, hasDatabase, prd, rules, schema]);
 
   const answers: Answer[] = useMemo(
     () => questions.map((q) => ({ question: q.question, answer: replies[q.id] ?? "" })),
@@ -159,6 +174,23 @@ export function Wizard() {
               edited, not the original. Correct a wrong assumption before you carry it
               forward.
             </p>
+
+            <div className="mt-8 flex flex-col items-center gap-3">
+              <Button
+                onClick={() => downloadBundle(bundle)}
+                disabled={!bundle.length || !!busy}
+                trailing={<ArrowGlyph />}
+              >
+                {busy
+                  ? "Still writing"
+                  : `Download all ${bundle.length} file${bundle.length === 1 ? "" : "s"}`}
+              </Button>
+              <p className="font-mono text-[11px] text-ink-muted">
+                {bundle.length
+                  ? `${bundle.map((e) => e.filename).join("  ")} — unzips into a repository root`
+                  : "nothing generated yet"}
+              </p>
+            </div>
           </header>
 
           <DocPanel
